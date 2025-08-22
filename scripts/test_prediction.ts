@@ -106,25 +106,26 @@ async function main() {
 
     // Step 4: Compare prediction vs reality
     console.log(`\n🔍 Step 4: Comparing Prediction vs Reality`);
-    console.log(`Predicted:  ${predictedAddress}`);
-    console.log(`Actual:      ${actualDeployedAddress}`);
 
-    if (predictedAddress.toString() === actualDeployedAddress.toString()) {
+    // Convert both to hex for proper comparison and display
+    const predictedHex = `0x${BigInt(predictedAddress).toString(16)}`;
+    const actualHex = actualDeployedAddress; // This is already in hex format
+
+    console.log(`Predicted:  ${predictedHex}`);
+    console.log(`Actual:     ${actualHex}`);
+
+    if (predictedHex === actualHex) {
       console.log("🎉 SUCCESS: Address prediction is correct!");
-      console.log("✅ Your get_address function works perfectly!");
-      console.log(
-        "✅ You can now predict addresses before deployment for 'initiate on behalf' scenarios"
-      );
     } else {
       console.log("❌ FAILURE: Address prediction is wrong!");
-      console.log("❌ The get_address function needs to be fixed");
 
-      // Show the difference
-      const predictedHex = BigInt(predictedAddress).toString(16);
-      const actualHex = BigInt(actualDeployedAddress).toString(16);
-      console.log(`\n📊 Hex Comparison:`);
-      console.log(`Predicted: 0x${predictedHex}`);
-      console.log(`Actual:    0x${actualHex}`);
+      console.log(`\n📊 Detailed Comparison:`);
+      console.log(`Predicted: ${predictedHex}`);
+      console.log(`Actual:    ${actualHex}`);
+
+      console.log(`\n🔢 Decimal Values:`);
+      console.log(`Predicted: ${predictedAddress}`);
+      console.log(`Actual:    ${BigInt(actualDeployedAddress)}`);
     }
   } catch (error) {
     console.error("❌ Error:", error);

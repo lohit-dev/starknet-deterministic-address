@@ -17,14 +17,13 @@ pub trait IRegistry<TContractState> {
 
 #[starknet::contract]
 mod registry {
-    use super::*;
     use core::array::ArrayTrait;
     use core::hash::HashStateTrait;
     use core::pedersen::PedersenTrait;
     use core::traits::Into;
     use starknet::SyscallResultTrait;
-
     use starknet::syscalls::deploy_syscall;
+    use super::*;
 
     const CONTRACT_ADDRESS_PREFIX: felt252 = 'STARKNET_CONTRACT_ADDRESS';
 
@@ -61,7 +60,7 @@ mod registry {
 
             let mut constructor_calldata: Array<felt252> = ArrayTrait::new();
             constructor_calldata.append(owner.into());
-          
+
             let (deployed_address, _) = deploy_syscall(
                 class_hash, salt, constructor_calldata.span(), false,
             )
