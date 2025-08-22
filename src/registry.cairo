@@ -1,30 +1,33 @@
+use starknet::class_hash::ClassHash;
+use starknet::contract_address::ContractAddress;
+#[starknet::interface]
+pub trait IRegistry<TContractState> {
+    fn create_address(
+        ref self: TContractState, name: felt252, owner: ContractAddress, class_hash: ClassHash,
+    ) -> ContractAddress;
+
+    fn get_address(
+        self: @TContractState,
+        name: felt252,
+        owner: ContractAddress,
+        class_hash: ClassHash,
+        deployer_address: ContractAddress,
+    ) -> ContractAddress;
+}
+
 #[starknet::contract]
 mod registry {
+    use super::*;
     use core::array::ArrayTrait;
     use core::hash::HashStateTrait;
     use core::pedersen::PedersenTrait;
     use core::traits::Into;
     use starknet::SyscallResultTrait;
-    use starknet::class_hash::ClassHash;
-    use starknet::contract_address::ContractAddress;
+
     use starknet::syscalls::deploy_syscall;
 
     const CONTRACT_ADDRESS_PREFIX: felt252 = 'STARKNET_CONTRACT_ADDRESS';
 
-    #[starknet::interface]
-    pub trait IRegistry<TContractState> {
-        fn create_address(
-            ref self: TContractState, name: felt252, owner: ContractAddress, class_hash: ClassHash,
-        ) -> ContractAddress;
-
-        fn get_address(
-            self: @TContractState,
-            name: felt252,
-            owner: ContractAddress,
-            class_hash: ClassHash,
-            deployer_address: ContractAddress,
-        ) -> ContractAddress;
-    }
 
     #[storage]
     struct Storage {}
@@ -58,7 +61,7 @@ mod registry {
 
             let mut constructor_calldata: Array<felt252> = ArrayTrait::new();
             constructor_calldata.append(owner.into());
-
+          
             let (deployed_address, _) = deploy_syscall(
                 class_hash, salt, constructor_calldata.span(), false,
             )
@@ -83,13 +86,16 @@ mod registry {
 
             let constructor_calldata_hash = PedersenTrait::new(0)
                 .update(*constructor_calldata.span().at(0))
+                .update(1)
                 .finalize();
 
-            let contract_address_hash = PedersenTrait::new(CONTRACT_ADDRESS_PREFIX)
+            let contract_address_hash = PedersenTrait::new(0)
+                .update(CONTRACT_ADDRESS_PREFIX)
                 .update(deployer_address.into())
                 .update(salt)
                 .update(class_hash.into())
                 .update(constructor_calldata_hash)
+                .update(5)
                 .finalize();
 
             contract_address_hash.try_into().unwrap()
@@ -113,7 +119,7 @@ mod tests {
     const TEST_CONTRACT_ADDRESS_PREFIX: felt252 = 'STARKNET_CONTRACT_ADDRESS';
 
     #[test]
-    #[available_gas(2000000000)]
+    // #[available_gas(2000000000)]
     fn test_salt_calculation() {
         // Test that the salt calculation is deterministic
         let salt1 = PedersenTrait::new(0).update(TEST_NAME).update(TEST_OWNER).finalize();
@@ -128,7 +134,7 @@ mod tests {
     }
 
     #[test]
-    #[available_gas(2000000000)]
+    // #[available_gas(2000000000)]
     fn test_calldata_hash_calculation() {
         // Test that the calldata hash calculation is deterministic
         let mut calldata1: Array<felt252> = ArrayTrait::new();
@@ -145,7 +151,7 @@ mod tests {
     }
 
     #[test]
-    #[available_gas(2000000000)]
+    // #[available_gas(2000000000)]
     fn test_address_calculation_components() {
         // Test individual components of the address calculation
         let salt = PedersenTrait::new(0).update(TEST_NAME).update(TEST_OWNER).finalize();
