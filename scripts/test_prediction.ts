@@ -59,7 +59,8 @@ async function main() {
     const predictedAddress = await registry.get_address(
       testName,
       ownerAddress,
-      classHash
+      classHash,
+      registryDeploy.deploy.contract_address
     );
     console.log(`📍 Predicted address: ${predictedAddress}`);
     console.log(
