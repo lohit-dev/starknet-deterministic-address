@@ -1,11 +1,13 @@
-use snforge_std::{ContractClassTrait, DeclareResultTrait, declare};
-use starknet::ContractAddress;
-use starknet::ClassHash;
-use starknet::eth_address::EthAddress;
-use crate::registry::{IRegistryDispatcher, IRegistryDispatcherTrait};
+use core::num::traits::Zero;
+use snforge_std::{
+    ContractClassTrait, DeclareResultTrait, declare, start_cheat_caller_address,
+    stop_cheat_caller_address,
+};
+use starknet::{ClassHash, ContractAddress};
+use crate::interface::{IRegistryDispatcher, IRegistryDispatcherTrait};
 
-const ADMIN: ContractAddress = 0x1111.try_into().unwrap();
-
+const ADMIN: felt252 = 0x1111;
+const OWNER: felt252 = 0x123;
 
 fn deploy_contract(name: ByteArray, calldata: @Array<felt252>) -> (ContractAddress, ClassHash) {
     let contract = declare(name).unwrap().contract_class();
@@ -13,32 +15,158 @@ fn deploy_contract(name: ByteArray, calldata: @Array<felt252>) -> (ContractAddre
     (contract_address, *contract.class_hash)
 }
 
-
 fn setup() -> (IRegistryDispatcher, ClassHash) {
-    let (registry_address, registry_class_hash) = deploy_contract("registry", @array![]);
-    let (uda_address, uda_class_hash) = deploy_contract("uda", @array!['peper']);
+    // owner is admin
+    let (registry_address, _registry_class_hash) = deploy_contract("registry", @array![ADMIN]);
+
+    // Deploy UDA contract to get its class hash
+    let (_uda_address, uda_class_hash) = deploy_contract("UniqueDepositAddress", @array![OWNER]);
+
+    // registry stuff
     let registry_disp = IRegistryDispatcher { contract_address: registry_address };
 
     (registry_disp, uda_class_hash)
 }
 
 #[test]
-fn test__deploy() {
-    let (registry_disp, uda_class_hash) = setup();
+fn test_basic_deployment() {
+    let (_registry_disp, _uda_class_hash) = setup();
 }
 
-const OWNER: ContractAddress = 0x123.try_into().unwrap();
+#[test]
+fn test_registry_owner() {
+    let (registry_disp, _uda_class_hash) = setup();
+
+    let owner = registry_disp.get_owner();
+    assert!(owner == ADMIN.try_into().unwrap(), "Owner should be ADMIN");
+}
 
 #[test]
-fn test__addresses() {
+fn test_set_impl_uda() {
     let (registry_disp, uda_class_hash) = setup();
-        
 
-    let addr0 = registry_disp.create_address('NAME', OWNER, uda_class_hash);
-    let addr1 = registry_disp.get_address('NAME', OWNER, uda_class_hash, registry_disp.contract_address);
+    // fake owner
+    start_cheat_caller_address(registry_disp.contract_address, ADMIN.try_into().unwrap());
 
-    println!("0x{:x}", addr0);
-    println!("0x{:x}", addr1);
+    let class_felt: felt252 = uda_class_hash.into();
+    let uda_impl_address: ContractAddress = class_felt.try_into().unwrap();
+    registry_disp.set_impl_uda(uda_impl_address);
 
-    assert!(addr0 == addr1, "not matching")
+    let stored_impl = registry_disp.get_impl_uda();
+    assert!(stored_impl == uda_impl_address, "UDA impl should be set");
+
+    stop_cheat_caller_address(registry_disp.contract_address);
+}
+
+#[test]
+fn test_add_htlc() {
+    let (registry_disp, _uda_class_hash) = setup();
+
+    // fake owner
+    start_cheat_caller_address(registry_disp.contract_address, ADMIN.try_into().unwrap());
+
+    let dummy_htlc: ContractAddress = 0x999.try_into().unwrap();
+    let dummy_token: ContractAddress = 0x888.try_into().unwrap();
+
+    registry_disp.add_htlc(dummy_htlc, dummy_token);
+
+    let stored_htlc = registry_disp.get_htlc_for_token(dummy_token);
+    assert!(stored_htlc == dummy_htlc, "HTLC should be stored for token");
+
+    stop_cheat_caller_address(registry_disp.contract_address);
+}
+
+#[test]
+fn test_add_native_htlc() {
+    let (registry_disp, _uda_class_hash) = setup();
+
+    start_cheat_caller_address(registry_disp.contract_address, ADMIN.try_into().unwrap());
+
+    let dummy_native_htlc: ContractAddress = 0x777.try_into().unwrap();
+
+    registry_disp.add_native_htlc(dummy_native_htlc);
+
+    let stored_native_htlc = registry_disp.get_native_htlc();
+    assert!(stored_native_htlc == dummy_native_htlc, "Native HTLC should be stored");
+
+    stop_cheat_caller_address(registry_disp.contract_address);
+}
+
+#[test]
+fn test_native_address_prediction() {
+    let (registry_disp, uda_class_hash) = setup();
+
+    // fake owner
+    start_cheat_caller_address(registry_disp.contract_address, ADMIN.try_into().unwrap());
+
+    let dummy_native_htlc: ContractAddress = 0x777.try_into().unwrap();
+    registry_disp.add_native_htlc(dummy_native_htlc);
+
+    let class_felt: felt252 = uda_class_hash.into();
+    let uda_impl_address: ContractAddress = class_felt.try_into().unwrap();
+    registry_disp.set_impl_native_uda(uda_impl_address);
+
+    stop_cheat_caller_address(registry_disp.contract_address);
+
+    let refund_address = OWNER.try_into().unwrap();
+    let redeemer: ContractAddress = 0xdef.try_into().unwrap();
+    let timelock: u128 = 1000;
+    let secret_hash: [u32; 8] = [1, 2, 3, 4, 5, 6, 7, 8];
+    let amount: u256 = 100;
+    let destination_data: Array<felt252> = array![];
+
+    let predicted_address = registry_disp
+        .get_native_address(
+            refund_address, redeemer, timelock, secret_hash, amount, destination_data.span(),
+        );
+
+    assert!(!predicted_address.is_zero(), "Predicted address should not be zero");
+
+    let predicted_address_2 = registry_disp
+        .get_native_address(
+            refund_address, redeemer, timelock, secret_hash, amount, destination_data.span(),
+        );
+
+    assert!(predicted_address == predicted_address_2, "Prediction should be deterministic");
+}
+
+#[test]
+fn test_native_prediction_vs_deployment_should_fail_and_will_fail() {
+    let (registry_disp, uda_class_hash) = setup();
+
+    // fake owner
+    start_cheat_caller_address(registry_disp.contract_address, ADMIN.try_into().unwrap());
+
+    let dummy_native_htlc: ContractAddress = 0x777.try_into().unwrap();
+    registry_disp.add_native_htlc(dummy_native_htlc);
+
+    let class_felt: felt252 = uda_class_hash.into();
+    let uda_impl_address: ContractAddress = class_felt.try_into().unwrap();
+    registry_disp.set_impl_native_uda(uda_impl_address);
+
+    stop_cheat_caller_address(registry_disp.contract_address);
+
+    let refund_address = OWNER.try_into().unwrap();
+    let redeemer: ContractAddress = 0xdef.try_into().unwrap();
+    let timelock: u128 = 1000;
+    let secret_hash: [u32; 8] = [1, 2, 3, 4, 5, 6, 7, 8];
+    let amount: u256 = 100;
+    let destination_data: Array<felt252> = array![];
+
+    // Step 1: Predict the address
+    let predicted_address = registry_disp
+        .get_native_address(
+            refund_address, redeemer, timelock, secret_hash, amount, destination_data.span(),
+        );
+
+    // Step 2: Actually deploy and get the real address
+    let actual_address = registry_disp
+        .create_native_swap_address(
+            refund_address, redeemer, timelock, secret_hash, amount, destination_data.span(),
+        );
+
+    println!("predicted_address: 0x{:?}", predicted_address);
+    println!("actual_address: 0x{:?}", actual_address);
+
+    assert!(predicted_address == actual_address, "Prediction should match deployment!");
 }

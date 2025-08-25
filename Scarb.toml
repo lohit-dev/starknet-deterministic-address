@@ -3,23 +3,26 @@ name = "uda_registry_test"
 version = "0.1.0"
 edition = "2024_07"
 
-# See more keys and their definitions at https://docs.swmansion.com/scarb/docs/reference/manifest.html
-[scripts]
-test = "snforge test"
+[dependencies] # used during your build compilation
+starknet = ">=2.9.2"
+openzeppelin = "0.20.0"
+openzeppelin_token = "0.20.0"
+openzeppelin_utils = "0.20.0"
+alexandria_bytes = { git = "https://github.com/keep-starknet-strange/alexandria.git", tag = "v0.5.1" }
+alexandria_encoding = { git = "https://github.com/keep-starknet-strange/alexandria.git", tag = "v0.5.1" }
 
-[dependencies]
-starknet = "2.12.0"
-
-[dev-dependencies]
+[dev-dependencies] # used during your test compilation
 cairo_test = "2.12.0"
 snforge_std = "0.48.1"
-assert_macros = "2.12.0"
-
-
-[tool.scarb]
-allow-prebuilt-plugins = ["snforge_std"]
+assert_macros = "2.12.0"  # allows the usage of macros such as assert_eq!, _ne!, etc
 
 
 [[target.starknet-contract]] # allows to build the package as a starknet contract
 sierra = true
-casm = true
+casm= true
+
+[scripts]
+test = "snforge test"
+
+[tool.scarb]
+allow-prebuilt-plugins = ["snforge_std"]
